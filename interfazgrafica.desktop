@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=SCB QC
+Comment=Ejecuta la interfaz gráfica para el control de la fuente de corriente
+Exec=/usr/bin/python3 /home/davo/Desktop/VRB/scbqc.py
+Icon=/home/davo/Desktop/VRB/logo/ATLAS logo.png
+Terminal=false
+Type=Application
+Categories=Application;Utility;
