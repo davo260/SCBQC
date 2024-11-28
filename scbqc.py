@@ -1,132 +1,59 @@
+"""
+Interfaz gráfica para el control de calidad de las tarjetas de acondicionamiento de señal (SCB).
+Permite ejecutar scripts de adquisición, mostrar resultados, y gestionar métricas y gráficos.
+
+Autor: Diego Alejandro Vera Ortega
+Fecha: 18/11/2024
+"""
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import subprocess
 import os
 import time
+from PIL import Image, ImageTk
+import pandas as pd
+import csv
+import matplotlib.pyplot as plt
 
 # Variable global para el proceso de adquisición
 proceso = None
 canales_actuales = set()  # Lista de canales detectados
 
-canales_actuales = set()
-
-def actualizar_canales(directorio_prueba):
+def actualizar_canales_prueba():
     """
-    Actualiza la lista de canales en el menú desplegable periódicamente.
+    Actualiza la lista de canales en el menú desplegable para la prueba seleccionada.
     """
     global canales_actuales
+    directorio_base = entrada_directorio.get()
+    prueba = entrada_prueba.get()
     nuevos_canales = set()
-    
-    if os.path.exists(directorio_prueba):
-        for carpeta in os.listdir(directorio_prueba):
-            ruta_carpeta = os.path.join(directorio_prueba, carpeta)
-            if os.path.isdir(ruta_carpeta):
-                nuevos_canales.add(carpeta)
+
+    if directorio_base and prueba:
+        directorio_prueba = os.path.join(directorio_base, prueba)
+        if os.path.exists(directorio_prueba):
+            for carpeta in os.listdir(directorio_prueba):
+                ruta_carpeta = os.path.join(directorio_prueba, carpeta)
+                if os.path.isdir(ruta_carpeta) and carpeta.startswith("PT"):
+                    nuevos_canales.add(carpeta)
     
     # Si hay canales nuevos, actualiza la lista
     if nuevos_canales != canales_actuales:
-        lista_canales["values"] = list(nuevos_canales)
-        canales_actuales = nuevos_canales
-    
-    ventana.after(2000, actualizar_canales, directorio_prueba)
+        lista_canales["values"] = sorted(list(nuevos_canales))
+        canales_actuales = sorted(nuevos_canales, key=lambda x: (x[:3], int(x[3:])))
+    else:
+        lista_canales["values"] = sorted(list(canales_actuales))
+
+    ventana.after(5000, actualizar_canales_prueba)  # Actualiza cada 5 segundos
 
 def seleccionar_directorio():
     """
     Selecciona el directorio base para guardar los datos.
     """
-    directorio = filedialog.askdirectory(title="Seleccionar Directorio de Prueba")
+    directorio = filedialog.askdirectory(title="Select Test Directory")
     if directorio:
         entrada_directorio.delete(0, tk.END)
         entrada_directorio.insert(0, directorio)
-        actualizar_canales(directorio)  # Llamada a la función correcta
-
-
-def mostrar_metricas():
-    """
-    Muestra las métricas del canal seleccionado
-    """
-    canal_seleccionado = lista_canales.get()
-    directorio_prueba = os.path.join(
-        entrada_directorio.get(), entrada_prueba.get()
-    )
-
-    if canal_seleccionado == "Selecciona un canal" or not canal_seleccionado:
-        messagebox.showerror("Error", "Debes seleccionar un canal.")
-        return
-
-    ruta_metricas = os.path.join(
-        directorio_prueba, canal_seleccionado, f"{canal_seleccionado}_metricas.txt"
-    )
-
-    if not os.path.exists(ruta_metricas):
-        messagebox.showerror(
-            "Error", f"No se encontraron métricas para el canal {canal_seleccionado}."
-        )
-        return
-
-    # Mostrar métricas en una nueva ventana
-    ventana_metricas = tk.Toplevel(ventana)
-    ventana_metricas.title(f"Métricas: {canal_seleccionado}")
-    ventana_metricas.geometry("600x400")
-
-    texto_metricas = tk.Text(ventana_metricas, wrap=tk.WORD)
-    texto_metricas.pack(expand=True, fill=tk.BOTH)
-
-    with open(ruta_metricas, "r") as archivo:
-        metricas_text = archivo.read()
-        texto_metricas.insert(tk.END, metricas_text)
-
-        # Extract and highlight pass/fail status
-        if "Estado de Calidad del Canal" in metricas_text:
-            estado = "Pasa" if "Pasa" in metricas_text else "No Pasa"
-            estado_label = tk.Label(
-                ventana_metricas,
-                text=f"Estado: {estado}",
-                font=("Open Sans", 14),
-                fg="green" if estado == "Pasa" else "red",
-            )
-            estado_label.pack(pady=10)
-
-
-def mostrar_grafica():
-    """
-    Muestra las gráficas del canal seleccionado.
-    """
-    canal_seleccionado = lista_canales.get()
-    directorio_prueba = os.path.join(
-        entrada_directorio.get(), entrada_prueba.get()
-    )
-
-    if canal_seleccionado == "Selecciona un canal" or not canal_seleccionado:
-        messagebox.showerror("Error", "Debes seleccionar un canal.")
-        return
-
-    ruta_grafica = os.path.join(
-        directorio_prueba, canal_seleccionado, f"{canal_seleccionado}_temperatura_vs_voltaje_scb.png"
-    )
-
-    if not os.path.exists(ruta_grafica):
-        messagebox.showerror(
-            "Error", f"No se encontraron gráficas para el canal {canal_seleccionado}."
-        )
-        return
-
-    # Mostrar gráfica en una nueva ventana
-    ventana_grafica = tk.Toplevel(ventana)
-    ventana_grafica.title(f"Gráfica: {canal_seleccionado}")
-    ventana_grafica.geometry("800x600")
-
-    img_label = tk.Label(ventana_grafica)
-    img_label.pack(fill=tk.BOTH, expand=True)
-
-    # Mostrar la imagen utilizando PIL
-    from PIL import Image, ImageTk
-
-    img = Image.open(ruta_grafica)
-    img = img.resize((800, 600), Image.ANTIALIAS)
-    img_tk = ImageTk.PhotoImage(img)
-    img_label.config(image=img_tk)
-    img_label.image = img_tk
+        actualizar_canales_prueba()
 
 def ejecutar_script():
     """
@@ -139,10 +66,10 @@ def ejecutar_script():
         threshold_temp = entrada_umbral.get()  # Get threshold from the user
 
         if not directorio_base or not os.path.exists(directorio_base):
-            messagebox.showerror("Error", "Debe seleccionar un directorio base válido.")
+            messagebox.showerror("Error", "You must select a valid base directory.")
             return
         if not prueba:
-            messagebox.showerror("Error", "Debe ingresar el nombre de la prueba.")
+            messagebox.showerror("Error", "You must enter the test name.")
             return
 
         directorio_prueba = os.path.join(directorio_base, prueba)
@@ -153,23 +80,24 @@ def ejecutar_script():
         proceso = subprocess.Popen(
             ["python3", "/home/davo/Desktop/VRB/src/adquisicion_datos.py", prueba, directorio_prueba, threshold_temp]
         )
-        label_estado.config(text="Ejecutando el script...", fg="green")
+        label_estado.config(text="Executing the script...", fg="green")
         ventana.after(1000, verificar_proceso)
-        actualizar_canales(directorio_prueba)
     else:
-        messagebox.showinfo("Información", "El script ya está en ejecución.")
-
+        messagebox.showinfo("Information", "The script is already running.")
 
 def verificar_proceso():
     """
     Verifica si el proceso sigue ejecutándose y actualiza la interfaz.
     """
     global proceso
+    mostrar_metricas_y_graficas()  # Mostrar métricas parciales
     if proceso and proceso.poll() is None:  # Proceso en ejecución
         ventana.after(1000, verificar_proceso)
     else:  # Proceso finalizado
         proceso = None
-        label_estado.config(text="Script finalizado.", fg="red")
+        label_estado.config(text="Script finished.", fg="red")
+        actualizar_canales_prueba()
+        mostrar_metricas_y_graficas()
 
 def detener_script():
     """
@@ -179,189 +107,254 @@ def detener_script():
     if proceso is not None:
         proceso.terminate()
         proceso = None
-        label_estado.config(text="Script detenido.", fg="red")
+        label_estado.config(text="Script stopped.", fg="red")
+        actualizar_canales_prueba()
     else:
-        messagebox.showinfo("Información", "No hay ningún script en ejecución.")
+        messagebox.showinfo("Información", "No script is currently running.")
 
-def seleccionar_directorio():
-    """
-    Selecciona el directorio base para guardar los datos.
-    """
-    directorio = filedialog.askdirectory(title="Seleccionar Directorio de Prueba")
-    if directorio:
-        entrada_directorio.delete(0, tk.END)
-        entrada_directorio.insert(0, directorio)
-        actualizar_canales(directorio)
-
-# Botón para mostrar métricas y gráficas del canal seleccionado
 def mostrar_metricas_y_graficas():
     """
-    Muestra las métricas y las gráficas (temperatura vs voltaje y delta vs temperatura VRB) 
-    del canal seleccionado.
+    Muestra las métricas y llena la tabla de resultados automáticamente.
+    También genera un archivo CSV con todas las temperaturas VRB y deltas de temperatura de todos los canales.
     """
-    canal_seleccionado = lista_canales.get()
     directorio_prueba = os.path.join(
         entrada_directorio.get(), entrada_prueba.get()
     )
 
-    if canal_seleccionado == "Selecciona un canal" or not canal_seleccionado:
-        messagebox.showerror("Error", "Debes seleccionar un canal.")
-        return
+    # Limpiar la tabla antes de llenarla nuevamente
+    for item in tabla_resultados.get_children():
+        tabla_resultados.delete(item)
 
-    # Ruta de las métricas y gráficas
-    ruta_metricas = os.path.join(
-        directorio_prueba, canal_seleccionado, f"{canal_seleccionado}_metricas.txt"
-    )
-    ruta_grafica_temperatura = os.path.join(
-        directorio_prueba, canal_seleccionado, f"{canal_seleccionado}_temperatura_vs_voltaje_scb.png"
-    )
-    ruta_grafica_delta = os.path.join(
-        directorio_prueba, canal_seleccionado, f"{canal_seleccionado}_delta_vs_temperatura_vrb.png"
-    )
+    # Diccionario para almacenar Temperatura VRB y deltas de temperatura
+    datos_combinados = {
+        "Temperatura VRB": []
+    }
 
-    if not os.path.exists(ruta_metricas):
-        messagebox.showerror(
-            "Error", f"No se encontraron métricas para el canal {canal_seleccionado}."
+    # Lista para almacenar todos los deltas de temperatura
+    todos_los_deltas = []
+
+    # Leer métricas de todos los canales y llenar la tabla
+    for canal in sorted(canales_actuales, key=lambda x: (x[:3], int(x[3:]))):
+        ruta_metricas_csv = os.path.join(
+            directorio_prueba, canal, f"{canal}_metricas.csv"
         )
-        return
 
-    if not os.path.exists(ruta_grafica_temperatura):
-        messagebox.showerror(
-            "Error", f"No se encontró la gráfica de temperatura vs voltaje SCB para el canal {canal_seleccionado}."
-        )
-        return
+        if not os.path.exists(ruta_metricas_csv):
+            continue
 
-    if not os.path.exists(ruta_grafica_delta):
-        messagebox.showerror(
-            "Error", f"No se encontró la gráfica de delta vs temperatura VRB para el canal {canal_seleccionado}."
-        )
-        return
+        # Leer métricas del archivo CSV y llenar la tabla
+        try:
+            with open(ruta_metricas_csv, 'r') as archivo_metricas:
+                lineas = archivo_metricas.readlines()
+                promedio_error = float(lineas[0].split(":")[1].strip().replace(',', '').replace('°C', '').strip())
+                promedio_error_abs = float(lineas[1].split(":")[1].strip().replace(',', '').replace('°C', '').strip())
+                error_maximo = float(lineas[2].split(":")[1].strip().replace(',', '').replace('°C', '').strip())
+                desviacion_estandar = float(lineas[3].split(":")[1].strip().replace(',', '').replace('°C', '').strip())
+                error_cuadratico_medio = float(lineas[4].split(":")[1].strip().replace(',', '').replace('°C', '').strip())
+                estado_calidad = lineas[5].split(":")[1].strip()
 
-    # Mostrar métricas en una nueva ventana
-    ventana_metricas = tk.Toplevel(ventana)
-    ventana_metricas.title(f"Resultados: {canal_seleccionado}")
-    ventana_metricas.geometry("800x800")
+            # Insertar los datos en la tabla
+            color = 'green' if estado_calidad.lower() == 'pass' else 'red'
+            tabla_resultados.insert("", "end", values=(
+                canal, estado_calidad, error_cuadratico_medio, desviacion_estandar, error_maximo
+            ), tags=(estado_calidad,))
+            tabla_resultados.tag_configure('Pass', foreground='green')
+            tabla_resultados.tag_configure('Fail', foreground='red')
+            tabla_resultados.tag_configure('No Pass', foreground='red')
 
-    # Texto para métricas
-    frame_metricas = tk.Frame(ventana_metricas)
-    frame_metricas.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=10)
+            # Agregar delta_temp al listado de todos los deltas
+            delta_temp = [float(line.strip().split(":")[1]) for line in lineas if "Delta Temperatura" in line]
+            todos_los_deltas.extend(delta_temp)
 
-    texto_metricas = tk.Text(frame_metricas, wrap=tk.WORD, height=10)
-    texto_metricas.pack(fill=tk.BOTH, expand=True)
+            # Agregar temperatura VRB y delta al diccionario de datos combinados
+            if "Temperatura VRB" not in datos_combinados or not datos_combinados["Temperatura VRB"]:
+                datos_combinados["Temperatura VRB"] = delta_temp  # Asumiendo que VRB es consistente en cada archivo
+            if len(datos_combinados["Temperatura VRB"]) == 0:
+                datos_combinados["Temperatura VRB"] = delta_temp  # Usar solo la primera columna VRB como referencia
+            else:
+                datos_combinados[canal] = delta_temp if len(delta_temp) == len(datos_combinados["Temperatura VRB"]) else [None] * len(datos_combinados["Temperatura VRB"])
+        
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to read metrics for channel {canal}: {e}")
+            return
 
-    with open(ruta_metricas, "r") as archivo:
-        texto_metricas.insert(tk.END, archivo.read())
+    # Guardar los datos combinados en un archivo CSV
+    ruta_csv_combinado = os.path.join(directorio_prueba, "combined_deltas.csv")
+    df_combinado = pd.DataFrame(datos_combinados)
+    df_combinado.to_csv(ruta_csv_combinado, index=False)
 
-    # Mostrar gráficas
-    from PIL import Image, ImageTk
+    # Guardar los datos combinados en un archivo CSV
+    ruta_csv_combinado = os.path.join(directorio_prueba, "combined_deltas.csv")
+    df_combinado = pd.DataFrame(datos_combinados)
+    df_combinado.to_csv(ruta_csv_combinado, index=False)
 
-    frame_graficas = tk.Frame(ventana_metricas)
-    frame_graficas.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True, padx=10, pady=10)
+    # Graficar todos los deltas de temperatura al finalizar
+    if todos_los_deltas:
+        fig, ax = plt.subplots()
+        ax.plot(todos_los_deltas, label="Delta Temperatures")
+        ax.set_xlabel("Index")
+        ax.set_ylabel("Delta Temperature (°C)")
+        ax.set_title("Delta Temperatures for All Channels")
+        ax.legend()
+        ax.grid()
 
-    # Primera gráfica: Temperatura vs Voltaje SCB
-    img_temperatura = Image.open(ruta_grafica_temperatura)
-    img_temperatura = img_temperatura.resize((350, 250), Image.ANTIALIAS)
-    img_temperatura_tk = ImageTk.PhotoImage(img_temperatura)
-
-    label_grafica_temperatura = tk.Label(frame_graficas, image=img_temperatura_tk)
-    label_grafica_temperatura.image = img_temperatura_tk  # Mantener referencia
-    label_grafica_temperatura.pack(side=tk.LEFT, padx=10)
-
-    # Segunda gráfica: Delta vs Temperatura VRB
-    img_delta = Image.open(ruta_grafica_delta)
-    img_delta = img_delta.resize((350, 250), Image.ANTIALIAS)
-    img_delta_tk = ImageTk.PhotoImage(img_delta)
-
-    label_grafica_delta = tk.Label(frame_graficas, image=img_delta_tk)
-    label_grafica_delta.image = img_delta_tk  # Mantener referencia
-    label_grafica_delta.pack(side=tk.RIGHT, padx=10)
-
-    # Botón para cerrar la ventana
-    boton_cerrar = tk.Button(
-        ventana_metricas, text="Cerrar", command=ventana_metricas.destroy
-    )
-    boton_cerrar.pack(pady=5)
-
+        # Integrar la gráfica en la interfaz de Tkinter
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+        canvas = FigureCanvasTkAgg(fig, master=frame_principal)
+        canvas.draw()
+        canvas.get_tk_widget().pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
 
 # Configuración de la ventana principal
 ventana = tk.Tk()
-ventana.title("SCB Control de calidad")
-ventana.geometry("600x400")
+ventana.title("SCB Quality Control")
+ventana.geometry("1200x800")
+
+# Logo en la parte superior izquierda
+frame_logo = tk.Frame(ventana)
+frame_logo.pack(side=tk.TOP, anchor="w", padx=10, pady=10)
+
+# Logo ATLAS
+logo_atlas = Image.open("/home/davo/Desktop/VRB/logo/ATLAS logo default transparent RGBHEX 300ppi.png")  # Ruta al logo de ATLAS
+logo_atlas = logo_atlas.resize((250, 100), Image.LANCZOS)
+logo_atlas_tk = ImageTk.PhotoImage(logo_atlas)
+label_logo_atlas = tk.Label(frame_logo, image=logo_atlas_tk)
+label_logo_atlas.image = logo_atlas_tk
+label_logo_atlas.pack(side=tk.LEFT)
+
+# Logo Universidad
+logo_uni = Image.open("/home/davo/Desktop/VRB/logo/LogoPUJ.png")  # Ruta al logo de la universidad
+logo_uni = logo_uni.resize((100, 100), Image.LANCZOS)
+logo_uni_tk = ImageTk.PhotoImage(logo_uni)
+label_logo_uni = tk.Label(frame_logo, image=logo_uni_tk)
+label_logo_uni.image = logo_uni_tk
+label_logo_uni.pack(side=tk.LEFT, padx=10)
 
 # Etiqueta de título
 label_titulo = tk.Label(
-    ventana, text="Control de calidad SCB", font=("Open Sans", 16)
+    frame_logo, text="Quality Control for the Signal Conditioning Board", font=("Open Sans", 23)
 )
-label_titulo.pack(pady=10)
+label_titulo.pack(side=tk.LEFT, padx=20)
+
+# Frame principal que contiene parámetros y explicación
+frame_principal = tk.Frame(ventana)
+frame_principal.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+# Frame para parámetros de entrada
+frame_parametros = tk.Frame(frame_principal)
+frame_parametros.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=10, anchor="n")
 
 # Entrada para el nombre de la prueba
-frame_prueba = tk.Frame(ventana)
-frame_prueba.pack(pady=5, fill=tk.X, padx=10)
+frame_prueba = tk.Frame(frame_parametros)
+frame_prueba.pack(pady=5, fill=tk.X)
 
-label_prueba = tk.Label(frame_prueba, text="Nombre de la Prueba:")
+label_prueba = tk.Label(frame_prueba, text="Test Name:")
 label_prueba.pack(side=tk.LEFT, padx=5)
 
 entrada_prueba = tk.Entry(frame_prueba)
 entrada_prueba.pack(side=tk.LEFT, fill=tk.X, expand=True)
+entrada_prueba.bind("<KeyRelease>", lambda event: actualizar_canales_prueba())
 
 # Selección del directorio base
-frame_directorio = tk.Frame(ventana)
-frame_directorio.pack(pady=5, fill=tk.X, padx=10)
+frame_directorio = tk.Frame(frame_parametros)
+frame_directorio.pack(pady=5, fill=tk.X)
 
-label_directorio = tk.Label(frame_directorio, text="Directorio Base:")
+label_directorio = tk.Label(frame_directorio, text="Base Directory:")
 label_directorio.pack(side=tk.LEFT, padx=5)
 
 entrada_directorio = tk.Entry(frame_directorio)
 entrada_directorio.pack(side=tk.LEFT, fill=tk.X, expand=True)
+entrada_directorio.bind("<KeyRelease>", lambda event: actualizar_canales_prueba())
 
 # Entrada para el umbral de temperatura
-frame_umbral = tk.Frame(ventana)
-frame_umbral.pack(pady=5, fill=tk.X, padx=10)
+frame_umbral = tk.Frame(frame_parametros)
+frame_umbral.pack(pady=5, fill=tk.X)
 
-label_umbral = tk.Label(frame_umbral, text="Umbral de Temperatura (°C):")
+label_umbral = tk.Label(frame_umbral, text="Temperature Threshold (°C):")
 label_umbral.pack(side=tk.LEFT, padx=5)
 
 entrada_umbral = tk.Entry(frame_umbral)
 entrada_umbral.insert(0, "2.0")  # Default threshold value
 entrada_umbral.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-
-boton_directorio = tk.Button(
-    frame_directorio, text="Seleccionar", command=seleccionar_directorio
-)
-boton_directorio.pack(side=tk.LEFT, padx=5)
-
 # Menú desplegable para seleccionar canal
-frame_canales = tk.Frame(ventana)
-frame_canales.pack(pady=5, fill=tk.X, padx=10)
+frame_canales = tk.Frame(frame_parametros)
+frame_canales.pack(pady=5, fill=tk.X)
 
-label_canales = tk.Label(frame_canales, text="Canal:")
+label_canales = tk.Label(frame_canales, text="Channel:")
 label_canales.pack(side=tk.LEFT, padx=5)
 
 lista_canales = ttk.Combobox(frame_canales, state="readonly")
 lista_canales.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-# Botón para ejecutar el script
+# Botón para seleccionar directorio
+boton_directorio = tk.Button(
+    frame_directorio, text="Select", command=seleccionar_directorio
+)
+boton_directorio.pack(side=tk.LEFT, padx=5)
+
+# Explicación de cada parámetro
+frame_explicacion = tk.Frame(frame_principal)
+frame_explicacion.pack(side=tk.RIGHT, fill=tk.Y, padx=10, pady=10, anchor="n")
+
+label_explicacion = tk.Label(
+    frame_explicacion, text="Explanation of Parameters:", font=("Open Sans", 14)
+)
+label_explicacion.pack(anchor="n", pady=10)
+
+explicacion_texto = (
+    "Test Name: Name to identify the quality test.\n"
+    "Base Directory: Path where the test results will be saved.\n"
+    "Temperature Threshold: Limit value for temperature during data acquisition.\n"
+    "Channel: Select the channel to view the results."
+)
+
+label_explicacion_texto = tk.Label(
+    frame_explicacion, text=explicacion_texto, font=("Open Sans", 12), justify="left"
+)
+label_explicacion_texto.pack(anchor="n")
+
+# Botones para ejecutar y detener el script
+frame_botones = tk.Frame(frame_parametros)
+frame_botones.pack(pady=10, fill=tk.X)
+
 boton_ejecutar = tk.Button(
-    ventana, text="Iniciar Adquisición", command=ejecutar_script, font=("Open Sans", 12)
+    frame_botones, text="Start Acquisition", command=ejecutar_script, font=("Open Sans", 12)
 )
-boton_ejecutar.pack(pady=10)
+boton_ejecutar.pack(side=tk.LEFT, padx=5, pady=5)
 
-# Botón para detener el script
 boton_detener = tk.Button(
-    ventana, text="Detener Adquisición", command=detener_script, font=("Open Sans", 12)
+    frame_botones, text="Stop Acquisition", command=detener_script, font=("Open Sans", 12)
 )
-boton_detener.pack(pady=10)
+boton_detener.pack(side=tk.LEFT, padx=5, pady=5)
 
-# Botón para mostrar métricas y gráficas
-boton_mostrar_resultados = tk.Button(
-    frame_canales, text="Mostrar Resultados", command=mostrar_metricas_y_graficas
-)
-boton_mostrar_resultados.pack(side=tk.LEFT, padx=5)
-
-
-label_estado = tk.Label(ventana, text="Estado: Inactivo", font=("Open Sans", 10), fg="red")
+# Estado del proceso
+label_estado = tk.Label(ventana, text="Status: Inactive", font=("Open Sans", 12), fg="red")
 label_estado.pack(pady=10)
+
+# Tabla para mostrar resultados
+frame_tabla_resultados = tk.Frame(ventana)
+frame_tabla_resultados.pack(side=tk.TOP, fill=tk.BOTH, padx=10, pady=10)
+
+label_tabla_resultados = tk.Label(frame_tabla_resultados, text="Test Results:")
+label_tabla_resultados.pack(side=tk.TOP, pady=5)
+
+columns = ("Channel", "Test Result", "Error (RMS °C)", "STDV (°C)", "Maximum Error (°C)")
+tabla_resultados = ttk.Treeview(frame_tabla_resultados, columns=columns, show="headings", style="Custom.Treeview")
+for col in columns:
+    tabla_resultados.heading(col, text=col, anchor='center')
+    tabla_resultados.column(col, minwidth=150, width=200, anchor='center')
+tabla_resultados.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+# Estilo personalizado para la tabla
+style = ttk.Style()
+style.configure("Custom.Treeview", 
+                background="#f0f0f0", 
+                foreground="black", 
+                rowheight=25, 
+                fieldbackground="#e0e0e0")
+style.map('Custom.Treeview', 
+           background=[('selected', '#4caf50')],
+           foreground=[('selected', 'white')])
 
 # Inicia el bucle principal de la interfaz
 ventana.mainloop()
